@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <random>
 #include <string>
 #include <utility>
 #include <vector>
@@ -14,7 +15,7 @@ using std::string;
 using std::swap;
 using std::vector;
 
-constexpr int TAKEN_COMBINATION_SOLUTION = 1000;
+constexpr int TAKEN_COMBINATION_SOLUTION = 10000;
 
 char game[5][5];
 char letters[25];
@@ -24,8 +25,6 @@ bool taken[26 * 26 * 26 * 26 * 26];
 vector<string> dictionary;
 
 vector<vector<string>> word_combination_solutions;
-
-int count = 0;
 
 int char_to_int(char c) {
     return c - 'a';
@@ -69,16 +68,17 @@ void read_dictionary() {
     }
 }
 
-void search() {
+void search(vector<string>::iterator current_it) {
     if (current.size() == 5) {
         word_combination_solutions.push_back(current);
         return;
     }
 
-    for (auto word : dictionary) {
+    for (auto it = current_it; it != dictionary.end(); it++) {
         if (word_combination_solutions.size() == TAKEN_COMBINATION_SOLUTION)
             return;
 
+        string word = *it;
         int word_number = word_to_int(word);
         if (taken[word_number])
             continue;
@@ -100,7 +100,7 @@ void search() {
 
         taken[word_number] = true;
         current.push_back(word);
-        search();
+        search(it + 1);
         taken[word_number] = false;
         current.pop_back();
         for (auto letter : word)
@@ -125,7 +125,7 @@ public:
 Solution calculate_swaps(vector<string> combination_solution) {
     vector<int> indices{0, 1, 2, 3, 4};
     vector<int> optimal_indices;
-    int optimal_indices_weight = -1;
+    int matched = -1;
 
     do {
         int current_weight = 0;
@@ -136,8 +136,8 @@ Solution calculate_swaps(vector<string> combination_solution) {
                 }
             }
         }
-        if (current_weight > optimal_indices_weight) {
-            optimal_indices_weight = current_weight;
+        if (current_weight > matched) {
+            matched = current_weight;
             optimal_indices = indices;
         }
     } while (std::next_permutation(indices.begin(), indices.end()));
@@ -155,10 +155,9 @@ Solution calculate_swaps(vector<string> combination_solution) {
         }
     }
 
-    int number_of_swaps = 0;
     Solution solution;
 
-    while (optimal_indices_weight != 25) {
+    while (matched != 25) {
         for (int i = 0; i < 5; i++) {
             for (int j = 0; j < 5; j++) {
                 if (game_copy[i][j] == combination[i][j])
@@ -171,8 +170,7 @@ Solution calculate_swaps(vector<string> combination_solution) {
                             continue;
 
                         if (game_copy[i][j] != game_copy[x][y] && game_copy[i][j] == combination[x][y] && game_copy[x][y] == combination[i][j]) {
-                            optimal_indices_weight += 2;
-                            number_of_swaps++;
+                            matched += 2;
                             solution.swaps.push_back({Coordinate(x, y), Coordinate(i, j)});
                             swap(game_copy[x][y], game_copy[i][j]);
                         }
@@ -190,8 +188,7 @@ Solution calculate_swaps(vector<string> combination_solution) {
                             if (game_copy[x][y] == combination[x][y])
                                 continue;
                             if (game_copy[x][y] == combination[i][j]) {
-                                optimal_indices_weight++;
-                                number_of_swaps++;
+                                matched++;
                                 swap(game_copy[x][y], game_copy[i][j]);
                                 solution.swaps.push_back({Coordinate(x, y), Coordinate(i, j)});
                                 goto done;
@@ -208,11 +205,16 @@ Solution calculate_swaps(vector<string> combination_solution) {
 }
 
 int main() {
+    cout << "Reading input..." << endl;
     read_input();
+    cout << "Done reading input..." << endl;
+    cout << "Reading dictionary..." << endl;
     read_dictionary();
-    cout << "Searching..." << endl;
-    search();
-    cout << "Done searching..." << endl;
+    cout << "Done reading dictionary..." << endl;
+    cout << "Generating possible configurations..." << endl;
+    search(dictionary.begin());
+    cout << "Done generating possible configurations..." << endl;
+    cout << "Checking each possible configuration..." << endl;
 
     Solution solution;
     solution.swaps = vector<pair<Coordinate, Coordinate>>(26, {Coordinate(), Coordinate()});
@@ -228,11 +230,16 @@ int main() {
     cout << "Minimum number of swaps: " << solution.swaps.size() << '\n';
 
     for (auto swap : solution.swaps) {
-        cout << "(" << swap.first.x << ", " << swap.first.y << "), (" << swap.second.x << ", " << swap.second.y << ")" << '\n';
+        cout << game[swap.first.x][swap.first.y] << "(" << swap.first.x + 1 << ", " << swap.first.y + 1 << "), " << game[swap.second.x][swap.second.y] << "(" << swap.second.x + 1 << ", " << swap.second.y + 1 << ")" << '\n';
+        std::swap(game[swap.first.x][swap.first.y], game[swap.second.x][swap.second.y]);
     }
     cout << '\n';
-    for (auto word : optimal_combination) {
-        cout << word << ' ';
+    for (int row = 0; row < 5; row++) {
+        for (int col = 0; col < 5; col++) {
+            cout << game[row][col];
+        }
+        cout << '\n';
     }
     cout << endl;
+
 }

@@ -60,7 +60,6 @@ chump
 yummy
 gunky
 abuzz
-chivy
 vichy
 zinky
 jumbo
@@ -6201,7 +6200,6 @@ cedar
 raced
 apods
 dopas
-spado
 socks
 fatso
 piece
