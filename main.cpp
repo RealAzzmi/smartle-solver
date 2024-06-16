@@ -1,30 +1,32 @@
 #include <algorithm>
+#include <cassert>
 #include <fstream>
 #include <iostream>
 #include <random>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
-
-#include <cassert>
 
 using std::cout, std::cin, std::endl;
 using std::ifstream;
 using std::pair;
 using std::string;
 using std::swap;
+using std::thread;
 using std::vector;
 
-constexpr int TAKEN_COMBINATION_SOLUTION = 10000;
+constexpr int TAKEN_COMBINATION_SOLUTION = 100'000;
+constexpr int NUM_OF_THREADS = 8;
 
 char game[5][5];
 char letters[25];
-int frequency[26];
-vector<string> current;
-bool taken[26 * 26 * 26 * 26 * 26];
+int frequency[NUM_OF_THREADS][26];
+vector<string> current[NUM_OF_THREADS];
+bool taken[NUM_OF_THREADS][26 * 26 * 26 * 26 * 26];
 vector<string> dictionary;
 
-vector<vector<string>> word_combination_solutions;
+vector<vector<string>> word_combination_solutions[NUM_OF_THREADS];
 
 int char_to_int(char c) {
     return c - 'a';
@@ -45,7 +47,9 @@ void read_input() {
         for (int col = 0; col < 5; col++) {
             cin >> game[row][col];
             letters[5 * row + col] = game[row][col];
-            frequency[game[row][col] - 'a']++;
+            for (int i = 0; i < NUM_OF_THREADS; i++) {
+                frequency[i][game[row][col] - 'a']++;
+            }
         }
     }
 }
@@ -68,43 +72,43 @@ void read_dictionary() {
     }
 }
 
-void search(vector<string>::iterator current_it) {
-    if (current.size() == 5) {
-        word_combination_solutions.push_back(current);
+void search(int thread_id, vector<string>::iterator current_it) {
+    if (current[thread_id].size() == 5) {
+        word_combination_solutions[thread_id].push_back(current[thread_id]);
         return;
     }
 
     for (auto it = current_it; it != dictionary.end(); it++) {
-        if (word_combination_solutions.size() == TAKEN_COMBINATION_SOLUTION)
+        if (word_combination_solutions[thread_id].size() == TAKEN_COMBINATION_SOLUTION)
             return;
 
         string word = *it;
         int word_number = word_to_int(word);
-        if (taken[word_number])
+        if (taken[thread_id][word_number])
             continue;
 
         for (auto letter : word)
-            frequency[letter - 'a']--;
+            frequency[thread_id][letter - 'a']--;
 
         bool valid = true;
         for (auto letter : word)
-            if (frequency[letter - 'a'] < 0)
+            if (frequency[thread_id][letter - 'a'] < 0)
                 valid = false;
 
         if (!valid) {
             for (auto letter : word) {
-                frequency[letter - 'a']++;
+                frequency[thread_id][letter - 'a']++;
             }
             continue;
         }
 
-        taken[word_number] = true;
-        current.push_back(word);
-        search(it + 1);
-        taken[word_number] = false;
-        current.pop_back();
+        taken[thread_id][word_number] = true;
+        current[thread_id].push_back(word);
+        search(thread_id, it + 1);
+        taken[thread_id][word_number] = false;
+        current[thread_id].pop_back();
         for (auto letter : word)
-            frequency[letter - 'a']++;
+            frequency[thread_id][letter - 'a']++;
     }
 }
 
@@ -164,12 +168,10 @@ Solution calculate_swaps(vector<string> combination_solution) {
                     continue;
                 for (int x = 0; x < 5; x++) {
                     for (int y = 0; y < 5; y++) {
-                        if (i == x && j == y)
-                            continue;
                         if (game_copy[x][y] == combination[x][y])
                             continue;
 
-                        if (game_copy[i][j] != game_copy[x][y] && game_copy[i][j] == combination[x][y] && game_copy[x][y] == combination[i][j]) {
+                        if (game_copy[i][j] == combination[x][y] && game_copy[x][y] == combination[i][j]) {
                             matched += 2;
                             solution.swaps.push_back({Coordinate(x, y), Coordinate(i, j)});
                             swap(game_copy[x][y], game_copy[i][j]);
@@ -183,8 +185,6 @@ Solution calculate_swaps(vector<string> combination_solution) {
                 if (game_copy[i][j] != combination[i][j]) {
                     for (int x = 0; x < 5; x++) {
                         for (int y = 0; y < 5; y++) {
-                            if (i == x && j == y)
-                                continue;
                             if (game_copy[x][y] == combination[x][y])
                                 continue;
                             if (game_copy[x][y] == combination[i][j]) {
@@ -204,28 +204,44 @@ Solution calculate_swaps(vector<string> combination_solution) {
     return solution;
 }
 
+void start_searching(int thread_id) {
+    for (int i = thread_id; i < dictionary.size(); i += NUM_OF_THREADS) {
+        search(thread_id, dictionary.begin() + i);
+    }
+}
+
 int main() {
-    cout << "Reading input..." << endl;
     read_input();
-    cout << "Done reading input..." << endl;
-    cout << "Reading dictionary..." << endl;
+    cout << "Reading input completed" << endl;
     read_dictionary();
-    cout << "Done reading dictionary..." << endl;
-    cout << "Generating possible configurations..." << endl;
-    search(dictionary.begin());
-    cout << "Done generating possible configurations..." << endl;
+    cout << "Reading dictionary completed" << endl;
+    cout << "Searching possible 5 word combinations (number of threads = " << NUM_OF_THREADS << ", combinations limit per thread = " << TAKEN_COMBINATION_SOLUTION << ")..." << endl;
+
+    vector<thread> threads(NUM_OF_THREADS);
+    for (int i = 0; i < NUM_OF_THREADS; ++i) {
+        threads[i] = thread(start_searching, i);
+    }
+    for (int i = 0; i < NUM_OF_THREADS; ++i) {
+        threads[i].join();
+    }
+    cout << "Searching completed..." << endl;
     cout << "Checking each possible configuration..." << endl;
 
+    int total_combinations = 0;
     Solution solution;
     solution.swaps = vector<pair<Coordinate, Coordinate>>(26, {Coordinate(), Coordinate()});
     vector<string> optimal_combination;
-    for (auto combination_solution : word_combination_solutions) {
-        auto current_swaps = calculate_swaps(combination_solution);
-        if (current_swaps.swaps.size() < solution.swaps.size()) {
-            solution.swaps = current_swaps.swaps;
-            optimal_combination = combination_solution;
+    for (int i = 0; i < NUM_OF_THREADS; ++i) {
+        total_combinations += word_combination_solutions[i].size();
+        for (auto combination_solution : word_combination_solutions[i]) {
+            auto current_swaps = calculate_swaps(combination_solution);
+            if (current_swaps.swaps.size() < solution.swaps.size()) {
+                solution.swaps = current_swaps.swaps;
+                optimal_combination = combination_solution;
+            }
         }
     }
+    cout << "Checked " << total_combinations << " combinations!" << endl;
 
     cout << "Minimum number of swaps: " << solution.swaps.size() << '\n';
 
@@ -241,5 +257,4 @@ int main() {
         cout << '\n';
     }
     cout << endl;
-
 }
